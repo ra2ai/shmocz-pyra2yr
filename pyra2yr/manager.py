@@ -36,13 +36,14 @@ class Manager:
         port : int, optional
             Destination server port, by default 14525
         poll_frequency : int, optional
-            Frequency for polling the game state in Hz, by default 20
+            Frequency for polling the game state in Hz, by default 20.
+            Set 0 to disable the background fetch loop
         fetch_state_timeout : float, optional
             Timeout (seconds) for state fetching (default: 5.0)
         """
         self.address = address
         self.port = port
-        self.poll_frequency = min(max(1, poll_frequency), 60)
+        self.poll_frequency = min(max(0, poll_frequency), 60)
         self.fetch_state_timeout = fetch_state_timeout
         self.state = StateManager()
         self.client: DualClient = DualClient(self.address, self.port)
@@ -111,11 +112,19 @@ class Manager:
         asyncio.exceptions.TimeoutError
             If the retrieval timed out.
         """
-        cmd = commands_yr.GetGameState()
+        cmd = commands_yr.ReadValue(
+            data=ra2yr.StorageValue(game_state=ra2yr.GameState())
+        )
         state = await self.client.exec_command(cmd, timeout=self.fetch_state_timeout)
         if not state.result.Unpack(cmd):
             raise RuntimeError(f"failed to unpack state: {state}")
-        return cmd.state
+        return cmd.data.game_state
+
+    async def unpause(self) -> commands_yr.Unpause:
+        res = await self.run(commands_yr.Unpause())
+        if not res.was_paused:
+            lg.info("Unpause: game was not paused")
+        return res
 
     async def run_command(self, c: Any) -> core.CommandResult:
         """This blocks until result available
@@ -150,6 +159,11 @@ class Manager:
         return res_o
 
     async def mainloop(self):
+        if self.poll_frequency == 0:
+            lg.info("Polling disabled, waiting for stop signal")
+            await self._stop.wait()
+            return
+
         d = 1 / self.poll_frequency
         deadline = dt.now().timestamp()
         while not self._stop.is_set():
@@ -458,9 +472,9 @@ class ManagerUtil:
             If frame is less than current frame or if single step mode isn't active.
         """
         # TODO: This is non-trivial.
-        # Calling blocking functions (basically any command) insisde step()
+        # Calling blocking functions (basically any command) inside step()
         # blocks the event loop with single step mode, because game loop remains blocked
-        # until next call to GetGameState.
+        # until next call to Unpause.
         #
         # Possible workaround:
         # Wrap command(s) inside asyncio tasks and await them after next state fetch
