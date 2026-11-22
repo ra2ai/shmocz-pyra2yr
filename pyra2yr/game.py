@@ -63,6 +63,7 @@ def get_compose_dict(
     vnc_port: int = 5901,
     novnc_port: int = 6081,
     tunnel_port: int = 50000,
+    tunnel_duration: int = 3600,
     x11_socket: Path = None,
     separate_vnc_desktop: bool = False,
 ) -> dict:
@@ -80,6 +81,9 @@ def get_compose_dict(
         Base noVNC web port (6081 for 1st display)
     tunnel_port : int
         CnCNet tunnel port (50000 by default)
+    tunnel_duration : int
+        Seconds the tunnel process stays up. Negative means until the
+        container stops (3600 by default)
     separate_vnc_desktop : bool
         If True, create separate VNC session per player (False by default).
         Only applies when using VNC (x11_socket is None)
@@ -161,6 +165,7 @@ def get_compose_dict(
         ComposeService(
             "tunnel",
             "shmocz/pycncnettunnel:latest",
+            command=f"pycncnettunnel --duration {int(tunnel_duration)}",
             stop_signal="SIGKILL",
             ports=[f"{p}:{p}" for p in ports],
         ),
@@ -266,6 +271,7 @@ class MultiGameInstanceConfig:
     spawner_name: str = "gamemd-spawn-ra2yrcpp.exe"
     tunnel_address: str = "0.0.0.0"
     tunnel_port: int = 50000
+    tunnel_duration: int = 3600
     use_syringe: bool = False
     x11_socket: Path = None
     separate_vnc_desktop: bool = False
@@ -511,6 +517,8 @@ class Game:
         D = get_compose_dict(
             ws_ports,
             container_image=self.cfg.container_image,
+            tunnel_port=self.cfg.tunnel_port,
+            tunnel_duration=self.cfg.tunnel_duration,
             x11_socket=self.cfg.x11_socket,
             separate_vnc_desktop=self.cfg.separate_vnc_desktop,
         )
