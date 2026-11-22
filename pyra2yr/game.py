@@ -543,8 +543,9 @@ class Game:
     def stop(self):
         """Stop all game instances."""
         prun(["docker", "compose", "down", "--remove-orphans", "-t", "1"])
-        self._proc.kill()
-        self._proc.wait()
+        if self._proc is not None:
+            self._proc.kill()
+            self._proc.wait()
         for g in self.games:
             g.stop()
         self.wait()
