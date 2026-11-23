@@ -48,6 +48,10 @@ class WebSocketClient:
     async def main(self):
         # send the initial message
         msg = await self.in_queue.get()
+        # too early call to close()
+        if msg is None:
+            return
+
         for i in range(self._tries):
             try:
                 debug("connect, try %d %d", i, self._tries)
