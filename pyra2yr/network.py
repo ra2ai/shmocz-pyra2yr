@@ -99,7 +99,6 @@ class DualClient:
         self.results = AsyncDict()
         self.in_queue = asyncio.Queue()
         self._poll_task = None
-        self._stop = asyncio.Event()
         # FIXME: ugly
         self._queue_set = asyncio.Event()
 
@@ -175,7 +174,7 @@ class DualClient:
 
     async def _poll_loop(self):
         await self._queue_set.wait()
-        while not self._stop.is_set():
+        while True:
             msg = await self.conns["poll"].send_message(
                 self.make_poll_blocking(
                     self.queue_id, int(self.timeout * 1000)
@@ -189,10 +188,27 @@ class DualClient:
                 await self.results.put_item(x.command_id, x)
 
     async def stop(self):
-        self._stop.set()
-        # Cancel ongoing command result waits
-        await self.results.close()
-        # TODO: Cancel this immediately. Currently waits up to self.timeout seconds.
-        await self._poll_task
-        await self.conns["command"].close()
-        await self.conns["poll"].close()
+        async def _cancel_task(task):
+            if task is None:
+                return
+            if not task.done():
+                task.cancel()
+            # Here an exception will raise when the await itself is cancelled.
+            await asyncio.gather(task, return_exceptions=True)
+
+        try:
+            await _cancel_task(self._poll_task)
+        finally:
+            # Cancel ongoing command result waits
+            await self.results.close()
+
+            if self.queue_id >= 0:
+                for conn in self.conns.values():
+                    try:
+                        async with asyncio.timeout(self.timeout):
+                            await conn.close()
+                    except TimeoutError:
+                        pass
+
+            for conn in self.conns.values():
+                await _cancel_task(conn.task)
