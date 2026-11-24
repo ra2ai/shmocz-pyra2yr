@@ -6,9 +6,13 @@ from typing import Any, Dict
 import aiohttp
 from ra2yrproto import core
 
-from .async_container import AsyncDict
+from .async_container import AsyncDict, AsyncDictClosed
 
 debug = logging.debug
+
+
+class ClientClosedError(RuntimeError):
+    """The client closed before a command result was available."""
 
 
 async def async_log_exceptions(coro):
@@ -154,13 +158,20 @@ class DualClient:
         ------
         asyncio.exceptions.TimeoutError
             If results were not available within timeout.
+        ClientClosedError
+            If the client stopped before the acknowledged command's result arrived.
         """
         msg = await self.run_client_command(c)
         if self.queue_id < 0:
             self.queue_id = msg.queue_id
             self._queue_set.set()
         # wait until results polled
-        return await self.results.get_item(msg.id, timeout=timeout, remove=True)
+        try:
+            return await self.results.get_item(msg.id, timeout=timeout, remove=True)
+        except AsyncDictClosed as e:
+            raise ClientClosedError(
+                f"client closed before result for command {msg.id} was available"
+            ) from e
 
     async def _poll_loop(self):
         await self._queue_set.wait()
@@ -179,6 +190,8 @@ class DualClient:
 
     async def stop(self):
         self._stop.set()
+        # Cancel ongoing command result waits
+        await self.results.close()
         # TODO: Cancel this immediately. Currently waits up to self.timeout seconds.
         await self._poll_task
         await self.conns["command"].close()
