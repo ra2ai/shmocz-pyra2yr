@@ -23,7 +23,7 @@ class Docker:
     ):
         r = cls._common(compose_files=compose_files)
         r.extend(["run", "--rm", "-T", "--pull", "never"])
-        if uid:
+        if uid is not None:
             r.extend(["-u", f"{uid}:{uid}"])
         if env:
             for k, v in env:

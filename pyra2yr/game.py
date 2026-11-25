@@ -40,7 +40,7 @@ def popen(args, **kwargs):
     return subprocess.Popen([str(x) for x in args], **kwargs)
 
 
-def get_game_uid():
+def get_game_uid(compose_file: Path):
     return int(
         prun(
             Docker.run(
@@ -50,6 +50,7 @@ def get_game_uid():
                     'import os; print(os.stat("/home/user/project").st_uid)',
                 ],
                 "game",
+                compose_files=[compose_file],
             ),
             check=True,
             capture_output=True,
@@ -276,6 +277,11 @@ class MultiGameInstanceConfig:
     x11_socket: Path = None
     separate_vnc_desktop: bool = False
     dll_directory: Path = None
+    project_directory: Path = Path(".")
+
+    @property
+    def compose_file(self):
+        return self.project_directory.resolve() / "docker-compose.instance.yml"
 
     def __post_init__(self):
         for k in ["color", "location", "name"]:
@@ -395,14 +401,20 @@ class MultiGameInstanceConfig:
 
 
 class GameInstance:
-    def __init__(self, cfg: MultiGameInstanceConfig, player_index: int, game_uid: int):
+    def __init__(self, cfg: MultiGameInstanceConfig, player_index: int):
         self.mcfg = cfg
         self.cfg = self.mcfg.players[player_index]
         self.player_index = player_index
-        self.game_uid = game_uid
         self.game_data_dir: Path = None
-        self.base_directory: Path = self.mcfg.base_directory
-        self.instance_dir = self.base_directory / self.cfg.name
+
+        project = cfg.project_directory.resolve()
+        self.base_directory = project / cfg.base_directory
+        self.instance_dir = (self.base_directory / self.cfg.name).resolve()
+        if not self.instance_dir.is_relative_to(project):
+            raise ValueError("Game instance must be inside project_directory")
+        if cfg.game_data_directory and self.instance_dir.is_relative_to(cfg.game_data_directory.resolve()):
+            raise ValueError("Game instance must be outside game_data_directory")
+
         self.map_path = self.instance_dir / "spawnmap.ini"
         self.spawn_path = self.instance_dir / "spawn.ini"
         self.wineprefix_dir = self.instance_dir / ".wine"
@@ -443,13 +455,14 @@ class GameInstance:
     def __start_native(self):
         raise NotImplementedError()
 
-    def __start_docker(self):
+    def __start_docker(self, *, uid: int):
+        project = self.mcfg.project_directory.resolve()
         cmd = [
             "./scripts/run-gamemd.py",
             "-w",
-            self.wineprefix_dir,
+            self.wineprefix_dir.relative_to(project),
             "-i",
-            self.instance_dir,
+            self.instance_dir.relative_to(project),
             "-g",
             self.mcfg.docker_game_data,
             "-s",
@@ -483,21 +496,21 @@ class GameInstance:
                 ("HOME", "/home/user"),
                 ("WINEARCH", "win32"),
             ],
-            uid=self.game_uid,
-            compose_files=["docker-compose.instance.yml"],
+            uid=uid,
+            compose_files=[self.mcfg.compose_file],
             volumes=volumes,
         )
         return popen(cmd_full)
 
     # TODO: call non-member fn
-    def start(self):
-        try:
-            self.prepare_instance_directory()
-            self._proc = {"docker": self.__start_docker, "native": self.__start_native}[
-                self.cfg.backend
-            ]()
-        except KeyError as e:
-            raise RuntimeError(f"Unknown backend: {self.cfg.backend}") from e
+    def start(self, *, uid: int):
+        self.prepare_instance_directory()
+        if self.cfg.backend == "docker":
+            self._proc = self.__start_docker(uid=uid)
+        elif self.cfg.backend == "native":
+            self._proc = self.__start_native()
+        else:
+            raise RuntimeError(f"Unknown backend: {self.cfg.backend}")
 
     def stop(self):
         prun(["docker", "stop", self._container_name])
@@ -511,17 +524,14 @@ class GameInstance:
 class Game:
     def __init__(self, cfg: MultiGameInstanceConfig):
         self.cfg = cfg
-        self.uid = get_game_uid()
         self.human_players = [p for p in cfg.players if p.ai_difficulty < 0]
-        self.games = [
-            GameInstance(cfg, c.index, game_uid=self.uid) for c in self.human_players
-        ]
+        self.games = [GameInstance(cfg, c.index) for c in self.human_players]
         self._proc: subprocess.Popen = None
 
     def start(self):
         """Start the main game."""
         # This needs to be generated dynamically to properly set port numbers
-        c = "docker-compose.instance.yml"
+        c = self.cfg.compose_file
         ws_ports = [p.ws_port for p in self.human_players]
         D = get_compose_dict(
             ws_ports,
@@ -546,12 +556,13 @@ class Game:
                 ["docker", "compose", "-f", c, "exec", "tunnel", "ls", "-l"], check=True
             )
         )
+        uid = get_game_uid(c)
         for g in self.games:
-            g.start()
+            g.start(uid=uid)
 
     def stop(self):
         """Stop all game instances."""
-        prun(["docker", "compose", "down", "--remove-orphans", "-t", "1"])
+        prun(["docker", "compose", "-f", self.cfg.compose_file, "down", "--remove-orphans", "-t", "1"])
         if self._proc is not None:
             self._proc.kill()
             self._proc.wait()
