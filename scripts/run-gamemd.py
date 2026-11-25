@@ -7,7 +7,6 @@ import argparse
 import traceback
 import datetime as dt
 from pathlib import Path
-import re
 import logging
 
 NAME_SPAWNER = "gamemd-spawn.exe"
@@ -85,7 +84,7 @@ def prun(args, **kwargs):
     return subprocess.run(cmdline, **kwargs)
 
 
-def create_symlinks(instance_dir: Path, game_data_dir: Path):
+def create_symlinks(instance_dir: Path, game_data_dir: Path, dll_directory=None):
     """Symlink relevant data files for this test instance."""
     # Clear old symlinks
     for fname in os.listdir(instance_dir):
@@ -93,11 +92,16 @@ def create_symlinks(instance_dir: Path, game_data_dir: Path):
         if p.is_symlink():
             p.unlink()
 
-    for p in re.split(r"\s+", FILE_PATHS):
-        mklink(instance_dir / p, game_data_dir / p)
-
-    for p in re.split(r"\s+", LIB_PATHS):
-        mklink(instance_dir / p, (game_data_dir / p).absolute())
+    sources = {name.lower(): (name, game_data_dir.absolute() / name)
+               for name in (FILE_PATHS + "\n" + LIB_PATHS).split()}
+    if dll_directory is not None:
+        for dll in dll_directory.iterdir():
+            if dll.suffix.lower() == ".dll" and dll.is_file():
+                key = dll.name.lower()
+                name = sources[key][0] if key in sources else dll.name
+                sources[key] = (name, dll.absolute())
+    for name, src in sources.values():
+        mklink(instance_dir / name, src)
 
     # for p in self.cfg.syringe_dlls:
     #     mklink(instance_dir / p, (self.game_data_dir / p).absolute())
@@ -173,7 +177,7 @@ def run_syringe(program, cwd=None, timeout=20.0):
 def run_gamemd(a):
     os.environ["WINEPREFIX"] = str(a.wineprefix_dir.absolute())
     prepare_wine_prefix(a.wineprefix_dir)
-    create_symlinks(a.instance_dir, a.game_data_dir)
+    create_symlinks(a.instance_dir, a.game_data_dir, a.dll_directory)
     cmdline = ["wine", a.spawner_name, "-SPAWN"]
     cwd = str(a.instance_dir.absolute())
     if a.syringe:
@@ -191,6 +195,7 @@ def parse_args():
     a.add_argument("-w", "--wineprefix-dir", type=Path)
     a.add_argument("-i", "--instance-dir", type=Path)
     a.add_argument("-g", "--game-data-dir", type=Path)
+    a.add_argument("--dll-directory", type=Path, help="Overlay top-level DLLs for this instance")
     a.add_argument("-s", "--spawner-name", type=str)
     a.add_argument("-S", "--syringe", help="Use syringe", action="store_true")
     a.set_defaults(func=run_gamemd)

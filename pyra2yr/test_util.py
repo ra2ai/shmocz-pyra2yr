@@ -28,6 +28,7 @@ cfg_json = r"""
   "syringe_dlls": [],
   "tunnel_address": "0.0.0.0",
   "tunnel_port": 50000,
+  "dll_directory": "../ra2yrcpp-dlls",
   "scenario": {
     "allies_allowed": true,
     "bridges_destroyable": true,

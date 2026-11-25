@@ -23,7 +23,9 @@ Multi-game test environments are created with docker and require Docker Compose.
 docker compose build
 ```
 
-Download and extract [ra2yrcpp](https://github.com/shmocz/ra2yrcpp/releases/download/latest/ra2yrcpp.zip) to game data folder. Patch `gamemd-spawn.exe` according to [instructions](https://github.com/shmocz/ra2yrcpp#usage) if you are not using Syringe.
+Download and extract [ra2yrcpp](https://github.com/shmocz/ra2yrcpp/releases/download/latest/ra2yrcpp.zip) outside the game data folder. In the game configuration, set `dll_directory` to the folder that directly contains the extracted DLLs. Each game instance uses those DLLs in preference to same-named DLLs (case-insensitive) in the game data folder, without modifying any original game files.
+
+If you are not using Syringe, patch `gamemd-spawn.exe` according to the [ra2yrcpp instructions](https://github.com/shmocz/ra2yrcpp#usage).
 
 ## Usage
 

@@ -275,6 +275,7 @@ class MultiGameInstanceConfig:
     use_syringe: bool = False
     x11_socket: Path = None
     separate_vnc_desktop: bool = False
+    dll_directory: Path = None
 
     def __post_init__(self):
         for k in ["color", "location", "name"]:
@@ -457,6 +458,14 @@ class GameInstance:
         if self.mcfg.use_syringe:
             cmd.append("--syringe")
 
+        volumes = [(self.mcfg.game_data_directory.resolve(), f"{self.mcfg.docker_game_data}:ro")]
+        if self.mcfg.dll_directory is not None:
+            overlay = self.mcfg.dll_directory.resolve(strict=True)
+            if not overlay.is_dir():
+                raise NotADirectoryError(overlay)
+            volumes.append((overlay, "/opt/instance-dlls:ro"))
+            cmd.extend(["--dll-directory", "/opt/instance-dlls"])
+
         # Use separate display per player if configured
         if self.mcfg.separate_vnc_desktop:
             display_num = 1 + sum(
@@ -476,7 +485,7 @@ class GameInstance:
             ],
             uid=self.game_uid,
             compose_files=["docker-compose.instance.yml"],
-            volumes=[(self.mcfg.game_data_directory.absolute(), "/home/user/RA2")],
+            volumes=volumes,
         )
         return popen(cmd_full)
 
