@@ -40,6 +40,11 @@ def popen(args, **kwargs):
     return subprocess.Popen([str(x) for x in args], **kwargs)
 
 
+GAME_IMAGE = "shmocz/pyra2yr:latest"
+TUNNEL_IMAGE = "shmocz/pycncnettunnel:latest"
+VNC_IMAGE = "shmocz/vnc:latest"
+
+
 def get_game_uid(compose_file: Path):
     return int(
         prun(
@@ -67,6 +72,8 @@ def get_compose_dict(
     tunnel_duration: int = 3600,
     x11_socket: Path = None,
     separate_vnc_desktop: bool = False,
+    tunnel_image: str = TUNNEL_IMAGE,
+    vnc_image: str = VNC_IMAGE,
 ) -> dict:
     """Generate docker-compose dict for game instances.
 
@@ -76,6 +83,10 @@ def get_compose_dict(
         WebSocket ports for each player; represents the number of players
     container_image : str
         Docker image for game containers
+    tunnel_image : str
+        Docker image for the tunnel service
+    vnc_image : str
+        Docker image shared by VNC, noVNC, and the window manager
     vnc_port : int
         Base VNC port (5901 for display :1)
     novnc_port : int
@@ -127,7 +138,7 @@ def get_compose_dict(
             services.extend([
                 ComposeService(
                     vnc_name,
-                    "shmocz/vnc:latest",
+                    vnc_image,
                     command=(
                         f"sh -c 'Xvnc :{display_num} -depth 24 -geometry $$RESOLUTION -br "
                         f"-rfbport={player_vnc_port} "
@@ -138,7 +149,7 @@ def get_compose_dict(
                 ),
                 ComposeService(
                     novnc_name,
-                    "shmocz/vnc:latest",
+                    vnc_image,
                     command=(
                         "/noVNC/utils/novnc_proxy --vnc "
                         f"localhost:{player_vnc_port} --listen {player_novnc_port}"
@@ -149,7 +160,7 @@ def get_compose_dict(
                 ),
                 ComposeService(
                     vm_name,
-                    "shmocz/vnc:latest",
+                    vnc_image,
                     command="sh -c 'exec openbox-session'",
                     network_mode="service:tunnel",
                     depends_on=[vnc_name],
@@ -165,7 +176,7 @@ def get_compose_dict(
     services.extend([
         ComposeService(
             "tunnel",
-            "shmocz/pycncnettunnel:latest",
+            tunnel_image,
             command=f"pycncnettunnel --duration {int(tunnel_duration)}",
             stop_signal="SIGKILL",
             ports=[f"{p}:{p}" for p in ports],
@@ -263,7 +274,7 @@ class MultiGameInstanceConfig:
     # Either "docker" or "native"
     backend: str = "docker"
     base_directory: Path = Path("./test_instances")
-    container_image: str = "shmocz/pyra2yr:latest"
+    container_image: str = GAME_IMAGE
     docker_game_data: Path = Path("/home/user/RA2")
     game_data_directory: Path = None
     ini_overrides: list[Path] = field(default_factory=list)
@@ -278,6 +289,8 @@ class MultiGameInstanceConfig:
     separate_vnc_desktop: bool = False
     dll_directory: Path = None
     project_directory: Path = Path(".")
+    tunnel_image: str = TUNNEL_IMAGE
+    vnc_image: str = VNC_IMAGE
 
     @property
     def compose_file(self):
@@ -540,6 +553,8 @@ class Game:
             tunnel_duration=self.cfg.tunnel_duration,
             x11_socket=self.cfg.x11_socket,
             separate_vnc_desktop=self.cfg.separate_vnc_desktop,
+            tunnel_image=self.cfg.tunnel_image,
+            vnc_image=self.cfg.vnc_image,
         )
         write_file(c, dump(D, Dumper=Dumper))
         base_services = [k for k in D["services"] if k != "game"]
