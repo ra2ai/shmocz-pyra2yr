@@ -6,7 +6,6 @@
 !.gitignore
 !.pylintrc
 !build.sh
-!docker-compose.yml
 !LICENSE
 !pyproject.toml
 !README.md

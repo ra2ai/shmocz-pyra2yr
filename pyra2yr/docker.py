@@ -3,10 +3,11 @@ from dataclasses import dataclass, field, asdict
 
 class Docker:
     @classmethod
-    def _common(cls, compose_files=None):
-        cf = compose_files or ["docker-compose.yml"]
+    def _common(cls, compose_files):
+        if not compose_files:
+            raise ValueError("At least one Compose file is required")
         r = ["docker", "compose"]
-        for c in cf:
+        for c in compose_files:
             r.extend(["-f", c])
         return r
 
@@ -15,13 +16,13 @@ class Docker:
         cls,
         cmd,
         service,
-        compose_files=None,
+        compose_files,
         uid=None,
         name=None,
         env=None,
         volumes=None,
     ):
-        r = cls._common(compose_files=compose_files)
+        r = cls._common(compose_files)
         r.extend(["run", "--rm", "-T", "--pull", "never"])
         if uid is not None:
             r.extend(["-u", f"{uid}:{uid}"])
@@ -38,8 +39,8 @@ class Docker:
         return r
 
     @classmethod
-    def exec(cls, cmd, service, compose_files=None, uid=None, env=None):
-        r = cls._common(compose_files=compose_files)
+    def exec(cls, cmd, service, compose_files, uid=None, env=None):
+        r = cls._common(compose_files)
         r.extend(["exec", "-T"])
         if uid:
             r.extend(["-u", f"{uid}:{uid}"])
@@ -51,7 +52,7 @@ class Docker:
         return r
 
     @classmethod
-    def up(cls, services, compose_files=None):
+    def up(cls, services, compose_files):
         r = cls._common(compose_files)
         r.extend(["up", "--wait", "--pull", "never"])
         r.extend(services)

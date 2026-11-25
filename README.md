@@ -17,11 +17,15 @@ TODO
 
 ## Setup
 
-Multi-game test environments are created with docker and require Docker Compose. Build the necessary images:
+Build the the following images with their default names from the repository root:
 
 ```bash
-docker compose build
+docker build -f docker/vnc.Dockerfile    -t shmocz/vnc:latest            ./
+docker build -f docker/tunnel.Dockerfile -t shmocz/pycncnettunnel:latest ./
+docker build -f docker/Dockerfile        -t shmocz/pyra2yr:latest        ./
 ```
+
+Docker Compose is required to launch games. The launcher generates a separate `docker-compose.instance.yml` for each run.
 
 Download and extract [ra2yrcpp](https://github.com/shmocz/ra2yrcpp/releases/download/latest/ra2yrcpp.zip) outside the game data folder. In the game configuration, set `dll_directory` to the folder that directly contains the extracted DLLs. Each game instance uses those DLLs in preference to same-named DLLs (case-insensitive) in the game data folder, without modifying any original game files.
 
