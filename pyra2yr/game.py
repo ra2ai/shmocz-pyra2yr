@@ -450,7 +450,9 @@ class GameInstance:
 
         # Use separate display per player if configured
         if self.mcfg.separate_vnc_desktop:
-            display_num = self.player_index + 1  # :1, :2, :3, ...
+            display_num = 1 + sum(
+                p.ai_difficulty < 0 for p in self.mcfg.players[:self.player_index]
+            )
         else:
             display_num = 1
 
