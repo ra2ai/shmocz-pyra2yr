@@ -74,6 +74,7 @@ def get_compose_dict(
     separate_vnc_desktop: bool = False,
     tunnel_image: str = TUNNEL_IMAGE,
     vnc_image: str = VNC_IMAGE,
+    bind_host: str = None,
 ) -> dict:
     """Generate docker-compose dict for game instances.
 
@@ -87,6 +88,8 @@ def get_compose_dict(
         Docker image for the tunnel service
     vnc_image : str
         Docker image shared by VNC, noVNC, and the window manager
+    bind_host : str
+        Optional host address for all published ports (for example, 127.0.0.1)
     vnc_port : int
         Base VNC port (5901 for display :1)
     novnc_port : int
@@ -179,7 +182,7 @@ def get_compose_dict(
             tunnel_image,
             command=f"pycncnettunnel --duration {int(tunnel_duration)}",
             stop_signal="SIGKILL",
-            ports=[f"{p}:{p}" for p in ports],
+            ports=[f"{bind_host}:{p}:{p}" if bind_host else f"{p}:{p}" for p in ports],
         ),
         ComposeService(
             "game",
@@ -291,6 +294,7 @@ class MultiGameInstanceConfig:
     project_directory: Path = Path(".")
     tunnel_image: str = TUNNEL_IMAGE
     vnc_image: str = VNC_IMAGE
+    bind_host: str = None
 
     @property
     def compose_file(self):
@@ -555,6 +559,7 @@ class Game:
             separate_vnc_desktop=self.cfg.separate_vnc_desktop,
             tunnel_image=self.cfg.tunnel_image,
             vnc_image=self.cfg.vnc_image,
+            bind_host=self.cfg.bind_host,
         )
         write_file(c, dump(D, Dumper=Dumper))
         base_services = [k for k in D["services"] if k != "game"]

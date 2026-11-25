@@ -3,6 +3,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
+from pyra2yr.game import get_compose_dict
+
 
 class RuntimeTest(TestCase):
     def test_overlay_is_per_instance_and_reversible(self):
@@ -24,3 +26,10 @@ class RuntimeTest(TestCase):
             create_symlinks(instance, data)
             self.assertFalse((instance / "extra.dll").exists())
             self.assertEqual((instance / "ddraw.dll").read_bytes(), b"original")
+
+    def test_bind_host_applies_to_all_published_ports(self):
+        args = ([14521, 14522], "local/game")
+        default = get_compose_dict(*args)["services"]["tunnel"]["ports"]
+        bound = get_compose_dict(*args, bind_host="127.0.0.1")["services"]["tunnel"]["ports"]
+        self.assertIn("6081:6081", default)
+        self.assertEqual(bound, [f"127.0.0.1:{mapping}" for mapping in default])
