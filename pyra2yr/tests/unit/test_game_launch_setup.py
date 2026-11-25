@@ -33,3 +33,15 @@ class RuntimeTest(TestCase):
         bound = get_compose_dict(*args, bind_host="127.0.0.1")["services"]["tunnel"]["ports"]
         self.assertIn("6081:6081", default)
         self.assertEqual(bound, [f"127.0.0.1:{mapping}" for mapping in default])
+
+    def test_second_desktop_uses_its_own_display_and_ports(self):
+        services = get_compose_dict(
+            [14521, 14522], "local/game", vnc_port=15901, novnc_port=16081,
+            separate_vnc_desktop=True,
+        )["services"]
+        self.assertIn("15902:15902", services["tunnel"]["ports"])
+        self.assertIn("16082:16082", services["tunnel"]["ports"])
+        self.assertIn("Xvnc :2 ", services["vnc-1"]["command"])
+        self.assertIn("-rfbport=15902 ", services["vnc-1"]["command"])
+        self.assertIn("--vnc localhost:15902 --listen 16082", services["novnc-1"]["command"])
+        self.assertEqual(services["wm-1"]["environment"]["DISPLAY"], ":2")

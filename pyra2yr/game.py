@@ -91,9 +91,9 @@ def get_compose_dict(
     bind_host : str
         Optional host address for all published ports (for example, 127.0.0.1)
     vnc_port : int
-        Base VNC port (5901 for display :1)
+        Base VNC port (by default, 5901 for display :1)
     novnc_port : int
-        Base noVNC web port (6081 for 1st display)
+        Base noVNC web port (by default, 6081 for 1st display)
     tunnel_port : int
         CnCNet tunnel port (50000 by default)
     tunnel_duration : int
@@ -295,6 +295,8 @@ class MultiGameInstanceConfig:
     tunnel_image: str = TUNNEL_IMAGE
     vnc_image: str = VNC_IMAGE
     bind_host: str = None
+    vnc_port: int = 5901
+    novnc_port: int = 6081
 
     @property
     def compose_file(self):
@@ -560,6 +562,8 @@ class Game:
             tunnel_image=self.cfg.tunnel_image,
             vnc_image=self.cfg.vnc_image,
             bind_host=self.cfg.bind_host,
+            vnc_port=self.cfg.vnc_port,
+            novnc_port=self.cfg.novnc_port,
         )
         write_file(c, dump(D, Dumper=Dumper))
         base_services = [k for k in D["services"] if k != "game"]
