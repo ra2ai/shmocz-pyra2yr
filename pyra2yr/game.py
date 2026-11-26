@@ -519,7 +519,9 @@ class GameInstance:
             compose_files=[self.mcfg.compose_file],
             volumes=volumes,
         )
-        return popen(cmd_full)
+        # Don't let Compose forward Ctrl-C from terminal to game; Game.stop() handles shutdown.
+        # Otherwise doubled SIGINT will be sent to "run-gamemd.py" and let it print stack traces.
+        return popen(cmd_full, start_new_session=True, stdin=subprocess.DEVNULL)
 
     # TODO: call non-member fn
     def start(self, *, uid: int):
@@ -586,12 +588,13 @@ class Game:
 
     def stop(self):
         """Stop all game instances."""
-        prun(["docker", "compose", "-f", self.cfg.compose_file, "down", "--remove-orphans", "-t", "1"])
+        down = prun(["docker", "compose", "-f", self.cfg.compose_file, "down", "--remove-orphans", "-t", "1"])
         if self._proc is not None:
             self._proc.kill()
             self._proc.wait()
-        for g in self.games:
-            g.stop()
+        if down.returncode:
+            for g in self.games:
+                g.stop()
         self.wait()
 
     def wait(self):
